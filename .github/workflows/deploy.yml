@@ -1,8 +1,8 @@
 name: Deploy solar-system viewer
 
+# Trigger manually after GitHub Pages is enabled for this repository:
+# Settings -> Pages -> Build and deployment -> Source: GitHub Actions.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -29,10 +29,6 @@ jobs:
         run: npm test
       - name: Build static site
         run: npm run build
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
