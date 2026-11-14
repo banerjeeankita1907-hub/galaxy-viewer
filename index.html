@@ -147,16 +147,16 @@
 
     const orbitLines = [];
     const planetMeshes = [];
-    const sceneScale = 5;
     for (const data of PLANETS) {
+      const visualScale = sceneDistance(data.elements.semiMajorAxisAU) / data.elements.semiMajorAxisAU;
       const orbitPoints = [];
       const samples = 360;
       for (let i = 0; i <= samples; i += 1) {
         const state = positionAtDays(data.elements, (i / samples) * data.elements.periodDays);
         orbitPoints.push(new THREE.Vector3(
-          state.x * sceneScale,
-          state.z * sceneScale,
-          state.y * sceneScale
+          state.x * visualScale,
+          state.z * visualScale,
+          state.y * visualScale
         ));
       }
       const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
@@ -172,6 +172,7 @@
         new THREE.MeshStandardMaterial({ color: data.color, roughness: 0.78, metalness: 0.02 })
       );
       planet.userData.planetData = data;
+      planet.userData.visualScale = visualScale;
       if (data.rings) {
         const ring = new THREE.Mesh(
           new THREE.RingGeometry(data.radius * 1.35, data.radius * 2.0, 72),
@@ -203,9 +204,9 @@
       for (let i = 0; i < PLANETS.length; i += 1) {
         const state = positionAtDays(PLANETS[i].elements, simulationDays);
         planetMeshes[i].position.set(
-          state.x * sceneScale,
-          state.z * sceneScale,
-          state.y * sceneScale
+          state.x * visualScale,
+          state.z * visualScale,
+          state.y * visualScale
         );
         planetMeshes[i].rotation.y += 0.002;
         if (selectedPlanet === PLANETS[i].name) {
