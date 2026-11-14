@@ -1,166 +1,274 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Galaxy Viewer - 3D Solar System</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#070b18">
+  <meta name="description" content="An interactive Three.js solar-system model using Kepler's equation and approximate J2000 orbital elements.">
+  <title>Kepler Solar System Viewer</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #000; }
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; overflow: hidden; background: #050814; color: #eaf0ff; }
     canvas { display: block; }
-    #info {
-      position: absolute;
-      bottom: 20px;
-      width: 100%;
-      text-align: center;
-      color: white;
-      font-family: sans-serif;
-      pointer-events: none;
-      text-shadow: 0 0 10px rgba(0,0,0,0.7);
+    .panel {
+      position: fixed; z-index: 2; top: 18px; left: 18px; width: min(340px, calc(100vw - 36px));
+      padding: 18px; border: 1px solid rgba(164, 189, 255, .2); border-radius: 16px;
+      background: rgba(9, 16, 37, .86); backdrop-filter: blur(16px);
+      box-shadow: 0 18px 50px rgba(0,0,0,.28);
+    }
+    h1 { margin: 0; font-size: 19px; letter-spacing: .01em; }
+    .subtitle { margin: 6px 0 16px; color: #9eadd0; font-size: 12px; line-height: 1.5; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; }
+    .row label, .date { font-size: 13px; color: #d4def6; }
+    output { color: #a9c7ff; font-size: 12px; font-variant-numeric: tabular-nums; }
+    input[type=range] { width: 100%; accent-color: #78a9ff; }
+    input[type=checkbox] { accent-color: #78a9ff; }
+    .buttons { display: flex; gap: 8px; }
+    button {
+      border: 1px solid rgba(160,185,255,.25); border-radius: 9px; padding: 8px 12px;
+      background: #17264b; color: #eff4ff; cursor: pointer; font: inherit; font-size: 12px;
+    }
+    button:hover { background: #233965; }
+    button:focus-visible, input:focus-visible { outline: 2px solid #9ec1ff; outline-offset: 3px; }
+    .details {
+      position: fixed; z-index: 2; right: 18px; top: 18px; width: min(250px, calc(100vw - 36px));
+      padding: 14px 16px; border: 1px solid rgba(164,189,255,.2); border-radius: 14px;
+      background: rgba(9, 16, 37, .78); backdrop-filter: blur(12px);
+    }
+    .details strong { display: block; font-size: 14px; margin-bottom: 5px; }
+    .details span { color: #a9b8d8; font-size: 12px; line-height: 1.5; }
+    .footer {
+      position: fixed; z-index: 2; left: 50%; bottom: 16px; transform: translateX(-50%);
+      width: max-content; max-width: calc(100vw - 24px); text-align: center;
+      color: #a8b4d0; font-size: 11px; line-height: 1.5; pointer-events: none;
+      text-shadow: 0 2px 8px #000;
+    }
+    .error { padding: 24px; color: #ffd5d5; }
+    @media (max-width: 640px) {
+      .panel { top: 10px; left: 10px; padding: 13px; width: min(300px, calc(100vw - 20px)); }
+      .details { top: auto; right: 10px; bottom: 60px; width: 175px; }
+      .footer { bottom: 8px; font-size: 10px; }
     }
   </style>
-</head>
-<body>
-  <div id="info">🪐 Drag to rotate · Scroll to zoom · Realistic orbits</div>
-
-  <!-- Three.js from CDN – no download needed -->
   <script type="importmap">
     {
       "imports": {
-        "three": "https://unpkg.com/three@0.126.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.126.0/examples/jsm/"
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
       }
     }
   </script>
+</head>
+<body>
+  <section class="panel" aria-label="Simulation controls">
+    <h1>Kepler Solar System</h1>
+    <p class="subtitle">Interactive heliocentric model · approximate J2000 elements</p>
+    <div class="row">
+      <label for="speed">Simulation speed</label>
+      <output id="speedLabel" for="speed">20 days/s</output>
+    </div>
+    <input id="speed" type="range" min="0" max="120" step="1" value="20">
+    <div class="row">
+      <label for="orbits">Show orbital paths</label>
+      <input id="orbits" type="checkbox" checked>
+    </div>
+    <div class="row">
+      <span class="date" id="dateLabel">J2000.0 · 2000-01-01</span>
+    </div>
+    <div class="buttons">
+      <button id="pauseButton" type="button">Pause</button>
+      <button id="resetButton" type="button">Reset epoch</button>
+    </div>
+  </section>
+
+  <aside class="details" aria-live="polite">
+    <strong id="planetName">Select a planet</strong>
+    <span id="planetDetails">Click a planet to inspect its modeled heliocentric distance.</span>
+  </aside>
+  <div class="footer">Drag to orbit · Scroll to zoom · Click a planet to inspect<br>Orbital distances and planet sizes are visually compressed, not to scale.</div>
+  <div id="fallback" class="error" hidden>WebGL is unavailable in this browser. Enable hardware acceleration to view the 3D scene.</div>
 
   <script type="module">
-    import * as THREE from 'three';
-    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { PLANETS, EPOCH_LABEL, EPOCH_UTC } from "./src/planet-data.js";
+    import { positionAtDays, sceneDistance } from "./src/orbits.js";
 
-    // --- Setup scene, camera, renderer ---
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050510);
-
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 30, 60);
-    camera.lookAt(0, 0, 0);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const fallback = document.getElementById("fallback");
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    } catch (error) {
+      fallback.hidden = false;
+      throw error;
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
+    renderer.domElement.setAttribute("aria-label", "Interactive 3D solar-system model");
     document.body.appendChild(renderer.domElement);
 
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050814);
+    const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 700);
+    camera.position.set(0, 38, 72);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.minDistance = 5;
-    controls.maxDistance = 200;
+    controls.dampingFactor = 0.055;
+    controls.minDistance = 7;
+    controls.maxDistance = 150;
+    controls.target.set(0, 0, 0);
 
-    // --- Lighting ---
-    const sunLight = new THREE.PointLight(0xffffff, 2, 0, 0);
-    sunLight.position.set(0, 0, 0);
-    scene.add(sunLight);
-    scene.add(new THREE.AmbientLight(0x222244));
+    scene.add(new THREE.AmbientLight(0x536080, 0.9));
+    const sunlight = new THREE.PointLight(0xffffff, 160, 0, 0);
+    scene.add(sunlight);
 
-    // --- Starfield ---
-    const starsGeometry = new THREE.BufferGeometry();
-    const starCount = 2000;
-    const starPositions = new Float32Array(starCount * 3);
-    for (let i = 0; i < starCount * 3; i += 3) {
-      starPositions[i] = (Math.random() - 0.5) * 600;
-      starPositions[i + 1] = (Math.random() - 0.5) * 400;
-      starPositions[i + 2] = (Math.random() - 0.5) * 400;
+    // Seeded starfield: visual output is repeatable across reloads.
+    let seed = 2026;
+    const random = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const starPositions = new Float32Array(2600 * 3);
+    for (let i = 0; i < starPositions.length; i += 3) {
+      starPositions[i] = (random() - 0.5) * 520;
+      starPositions[i + 1] = (random() - 0.5) * 320;
+      starPositions[i + 2] = (random() - 0.5) * 520;
     }
-    starsGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-    const starsMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5 });
-    const stars = new THREE.Points(starsGeometry, starsMaterial);
-    scene.add(stars);
+    const starGeometry = new THREE.BufferGeometry();
+    starGeometry.setAttribute("position", new THREE.BufferAttribute(starPositions, 3));
+    scene.add(new THREE.Points(starGeometry, new THREE.PointsMaterial({ color: 0xdce6ff, size: 0.52 })));
 
-    // --- Sun ---
-    const sunGeometry = new THREE.SphereGeometry(3, 32, 32);
-    const sunMaterial = new THREE.MeshStandardMaterial({
-      color: 0xffaa00,
-      emissive: 0xff5500,
-      roughness: 0.4
-    });
-    const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+    const sun = new THREE.Mesh(
+      new THREE.SphereGeometry(2.5, 40, 32),
+      new THREE.MeshBasicMaterial({ color: 0xffbd63 })
+    );
     scene.add(sun);
 
-    // --- Planets data ---
-    const planetsData = [
-      { name: 'Mercury', distance: 6, size: 0.4, color: 0xaaaaaa, speed: 0.02 },
-      { name: 'Venus', distance: 8, size: 0.8, color: 0xffcc88, speed: 0.015 },
-      { name: 'Earth', distance: 10, size: 0.9, color: 0x2299ff, speed: 0.01 },
-      { name: 'Mars', distance: 13, size: 0.5, color: 0xff6644, speed: 0.008 },
-      { name: 'Jupiter', distance: 18, size: 2.2, color: 0xffcc99, speed: 0.005 },
-      { name: 'Saturn', distance: 23, size: 1.8, color: 0xeeddbb, speed: 0.004, ring: true },
-      { name: 'Uranus', distance: 28, size: 1.3, color: 0x99ddff, speed: 0.003 },
-      { name: 'Neptune', distance: 33, size: 1.2, color: 0x4466ff, speed: 0.002 }
-    ];
-
-    const planets = [];
-    planetsData.forEach((data) => {
-      const geometry = new THREE.SphereGeometry(data.size, 32, 32);
-      const material = new THREE.MeshStandardMaterial({ color: data.color, roughness: 0.7 });
-      const planet = new THREE.Mesh(geometry, material);
-      planet.userData = {
-        distance: data.distance,
-        speed: data.speed,
-        angle: Math.random() * Math.PI * 2
-      };
-      scene.add(planet);
-
-      if (data.ring) {
-        const ringGeometry = new THREE.RingGeometry(data.size * 1.4, data.size * 2.2, 64);
-        const ringMaterial = new THREE.MeshStandardMaterial({
-          color: 0xc2b280,
-          side: THREE.DoubleSide,
-          transparent: true,
-          opacity: 0.4,
-          roughness: 0.5
-        });
-        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-        ring.rotation.x = Math.PI / 2 + 0.1;
-        planet.add(ring);
-      }
-
+    const orbitLines = [];
+    const planetMeshes = [];
+    const sceneScale = 5;
+    for (const data of PLANETS) {
       const orbitPoints = [];
-      const radius = data.distance;
-      for (let i = 0; i <= 128; i++) {
-        const angle = (i / 128) * Math.PI * 2;
-        orbitPoints.push(new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius));
+      const samples = 360;
+      for (let i = 0; i <= samples; i += 1) {
+        const state = positionAtDays(data.elements, (i / samples) * data.elements.periodDays);
+        orbitPoints.push(new THREE.Vector3(
+          state.x * sceneScale,
+          state.z * sceneScale,
+          state.y * sceneScale
+        ));
       }
       const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
       const orbitLine = new THREE.Line(
         orbitGeometry,
-        new THREE.LineBasicMaterial({ color: 0x334455 })
+        new THREE.LineBasicMaterial({ color: 0x304467, transparent: true, opacity: 0.75 })
       );
       scene.add(orbitLine);
+      orbitLines.push(orbitLine);
 
-      planets.push(planet);
+      const planet = new THREE.Mesh(
+        new THREE.SphereGeometry(data.radius, 32, 24),
+        new THREE.MeshStandardMaterial({ color: data.color, roughness: 0.78, metalness: 0.02 })
+      );
+      planet.userData.planetData = data;
+      if (data.rings) {
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(data.radius * 1.35, data.radius * 2.0, 72),
+          new THREE.MeshStandardMaterial({
+            color: 0xc9b78f, side: THREE.DoubleSide, transparent: true, opacity: 0.6
+          })
+        );
+        ring.rotation.x = -Math.PI / 2.15;
+        planet.add(ring);
+      }
+      scene.add(planet);
+      planetMeshes.push(planet);
+    }
+
+    const speedInput = document.getElementById("speed");
+    const speedLabel = document.getElementById("speedLabel");
+    const dateLabel = document.getElementById("dateLabel");
+    const pauseButton = document.getElementById("pauseButton");
+    const resetButton = document.getElementById("resetButton");
+    const orbitToggle = document.getElementById("orbits");
+    const planetName = document.getElementById("planetName");
+    const planetDetails = document.getElementById("planetDetails");
+    const epochMs = Date.parse(EPOCH_UTC);
+    let simulationDays = 0;
+    let paused = false;
+    let selectedPlanet = null;
+
+    function updateSimulationState() {
+      for (let i = 0; i < PLANETS.length; i += 1) {
+        const state = positionAtDays(PLANETS[i].elements, simulationDays);
+        planetMeshes[i].position.set(
+          state.x * sceneScale,
+          state.z * sceneScale,
+          state.y * sceneScale
+        );
+        planetMeshes[i].rotation.y += 0.002;
+        if (selectedPlanet === PLANETS[i].name) {
+          planetDetails.textContent = `Modeled heliocentric radius: ${state.radiusAU.toFixed(4)} AU · Period: ${PLANETS[i].elements.periodDays.toLocaleString()} days`;
+        }
+      }
+      const date = new Date(epochMs + simulationDays * 86400000);
+      dateLabel.textContent = `${EPOCH_LABEL} · ${date.toISOString().slice(0, 10)}`;
+    }
+
+    speedInput.addEventListener("input", () => {
+      speedLabel.textContent = `${speedInput.value} days/s`;
+    });
+    orbitToggle.addEventListener("change", () => {
+      orbitLines.forEach((line) => { line.visible = orbitToggle.checked; });
+    });
+    pauseButton.addEventListener("click", () => {
+      paused = !paused;
+      pauseButton.textContent = paused ? "Resume" : "Pause";
+    });
+    resetButton.addEventListener("click", () => {
+      simulationDays = 0;
+      updateSimulationState();
     });
 
-    // --- Animation loop ---
-    function animate() {
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    renderer.domElement.addEventListener("click", (event) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const intersections = raycaster.intersectObjects(planetMeshes, false);
+      if (intersections.length) {
+        const data = intersections[0].object.userData.planetData;
+        selectedPlanet = data.name;
+        planetName.textContent = data.name;
+        const state = positionAtDays(data.elements, simulationDays);
+        planetDetails.textContent = `Modeled heliocentric radius: ${state.radiusAU.toFixed(4)} AU · Period: ${data.elements.periodDays.toLocaleString()} days`;
+      }
+    });
+
+    let previousFrame = 0;
+    function animate(timestamp) {
       requestAnimationFrame(animate);
-
-      planets.forEach((planet) => {
-        planet.userData.angle += planet.userData.speed;
-        const dist = planet.userData.distance;
-        planet.position.x = Math.cos(planet.userData.angle) * dist;
-        planet.position.z = Math.sin(planet.userData.angle) * dist;
-        planet.rotation.y += 0.01;
-      });
-
-      stars.rotation.y += 0.0001;
+      if (previousFrame) {
+        const deltaSeconds = Math.min((timestamp - previousFrame) / 1000, 0.05);
+        if (!paused) {
+          simulationDays += deltaSeconds * Number(speedInput.value);
+          updateSimulationState();
+        }
+      }
+      previousFrame = timestamp;
       controls.update();
       renderer.render(scene, camera);
     }
+    updateSimulationState();
+    requestAnimationFrame(animate);
 
-    animate();
-
-    window.addEventListener('resize', () => {
+    window.addEventListener("resize", () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
   </script>
