@@ -1,0 +1,13 @@
+{
+  "name": "kepler-solar-system-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Interactive Three.js solar-system visualization using a tested Kepler orbit model",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
