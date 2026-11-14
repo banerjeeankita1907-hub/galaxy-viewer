@@ -203,10 +203,11 @@
     function updateSimulationState() {
       for (let i = 0; i < PLANETS.length; i += 1) {
         const state = positionAtDays(PLANETS[i].elements, simulationDays);
+        const scale = planetMeshes[i].userData.visualScale;
         planetMeshes[i].position.set(
-          state.x * visualScale,
-          state.z * visualScale,
-          state.y * visualScale
+          state.x * scale,
+          state.z * scale,
+          state.y * scale
         );
         planetMeshes[i].rotation.y += 0.002;
         if (selectedPlanet === PLANETS[i].name) {
