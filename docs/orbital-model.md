@@ -11,7 +11,7 @@ For elapsed time t (days), the mean anomaly is
 
     M(t) = M0 + 2π t / P
 
-Kepler's equation is solved with Newton iteration:
+Kepler's equation is solved with a safeguarded Newton method. The solver keeps\na [0, 2π] bracket (the residual is strictly increasing for elliptical orbits),\nuses a Newton step only when it remains inside the bracket, and otherwise\nfalls back to bisection. It terminates on a residual or bracket-width tolerance:
 
     M = E - e sin(E)
 
@@ -39,7 +39,7 @@ navigation, conjunction prediction or scientific measurement.
 ## Numerical validation
 
 The Node test suite checks:
-- residuals of Kepler's equation over circular and eccentric cases;
+- residuals of Kepler's equation over circular, highly eccentric and wrapped-angle cases;\n- convergence near the parabolic limit and explicit iteration-exhaustion behavior;
 - constant radius and periodicity for a circular test orbit;
 - periapsis/apoapsis bounds for an eccentric orbit;
 - finite positions for all configured planets;
