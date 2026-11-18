@@ -14,6 +14,23 @@ test("Kepler solver satisfies M = E - e sin(E)", () => {
   }
 });
 
+test("safeguarded Kepler solver converges near the parabolic limit and across angle wraps", () => {
+  for (const eccentricity of [0.9, 0.99, 0.999999]) {
+    for (const meanAnomaly of [1e-12, 1e-8, 1e-4, Math.PI, TAU - 1e-8, -1e-8, 17.2]) {
+      const eccentricAnomaly = solveKepler(meanAnomaly, eccentricity);
+      const wrappedMean = ((meanAnomaly % TAU) + TAU) % TAU;
+      const residual = eccentricAnomaly - eccentricity * Math.sin(eccentricAnomaly) - wrappedMean;
+      assert.ok(Math.abs(residual) < 1e-10, `residual ${residual} for e=${eccentricity}, M=${meanAnomaly}`);
+    }
+  }
+});
+
+test("Kepler solver rejects non-finite tolerances and reports iteration exhaustion", () => {
+  assert.throws(() => solveKepler(1, 0.5, Number.POSITIVE_INFINITY), RangeError);
+  assert.throws(() => solveKepler(1, 0.5, Number.NaN), RangeError);
+  assert.throws(() => solveKepler(1, 0.9, 1e-15, 1), /did not converge/);
+});
+
 test("circular orbit has constant radius and repeats after one period", () => {
   const elements = {
     semiMajorAxisAU: 2,
